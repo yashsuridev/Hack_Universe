@@ -14,8 +14,11 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     configure_logging()
     logger.info("Starting SBOM Auditor", version=settings.app_version)
-    init_db()
-    logger.info("Database initialized")
+    try:
+        init_db()
+        logger.info("Database initialized")
+    except Exception as e:
+        logger.error("Database initialization notice", error=str(e))
     yield
     logger.info("Shutting down SBOM Auditor")
 
