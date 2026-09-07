@@ -16,23 +16,25 @@ import json
 import time
 from typing import Dict, Any, Optional
 
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+    HAS_GENAI = True
+except Exception:
+    genai = None
+    HAS_GENAI = False
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-# Set your Gemini API key here or via environment variable:
-#   export GEMINI_API_KEY="your-key-here"
-# Or set inline:
-#   GEMINI_API_KEY = "your-key-here"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
-# Configure Gemini if key provided; otherwise, model will be None
-# and fallback summary will be used automatically
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    MODEL = genai.GenerativeModel("gemini-1.5-flash")
+if GEMINI_API_KEY and HAS_GENAI:
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        MODEL = genai.GenerativeModel("gemini-1.5-flash")
+    except Exception:
+        MODEL = None
 else:
     MODEL = None
 
