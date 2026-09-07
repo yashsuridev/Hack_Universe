@@ -3,8 +3,11 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 
-const API = 'http://localhost:8001/api'
-const WS_URL = `ws://localhost:8001/ws/alerts`
+const SOC_API = import.meta.env.VITE_SOC_API_URL || 'http://localhost:8001'
+const API = `${SOC_API}/api`
+const WS_PROTOCOL = SOC_API.startsWith('https') ? 'wss:' : 'ws:'
+const WS_HOST = SOC_API.replace(/^https?:\/\//, '')
+const WS_URL = `${WS_PROTOCOL}//${WS_HOST}/ws/alerts`
 
 export function useSOC() {
   const [alerts, setAlerts] = useState([])

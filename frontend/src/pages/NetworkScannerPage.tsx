@@ -2,13 +2,15 @@ import { ShieldAlert, Activity, Search } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { HeroSection } from '../components/ui/HeroSection';
 
+const NETWORK_SCANNER_API = import.meta.env.VITE_NETWORK_SCANNER_API_URL || 'http://localhost:8002';
+
 export function NetworkScannerPage() {
   const [target, setTarget] = useState('127.0.0.1');
   const [status, setStatus] = useState({ running: false, results: null as any, error: null as any });
 
   const checkStatus = async () => {
     try {
-      const res = await fetch('http://localhost:8002/api/scan/status');
+      const res = await fetch(`${NETWORK_SCANNER_API}/api/scan/status`);
       const data = await res.json();
       setStatus(data);
     } catch (e) {
@@ -23,10 +25,10 @@ export function NetworkScannerPage() {
 
   const startScan = async () => {
     try {
-      await fetch(`http://localhost:8002/api/scan/start?target=${target}`, { method: 'POST' });
+      await fetch(`${NETWORK_SCANNER_API}/api/scan/start?target=${target}`, { method: 'POST' });
       checkStatus();
     } catch (e) {
-      alert("Failed to connect to scanner API. Ensure scanner_api.py is running on port 8002.");
+      alert("Failed to connect to scanner API.");
     }
   };
 
