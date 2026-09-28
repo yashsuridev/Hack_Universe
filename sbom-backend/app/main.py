@@ -17,6 +17,22 @@ async def lifespan(app: FastAPI):
     try:
         init_db()
         logger.info("Database initialized")
+        # Cleanup orphaned running scans from server restarts
+        from app.database.database import SessionLocal
+        from app.models.scan import Scan, ScanStatus
+        db = SessionLocal()
+        try:
+            stale_scans = db.query(Scan).filter(Scan.status.in_([ScanStatus.RUNNING, ScanStatus.PENDING])).all()
+            for s in stale_scans:
+                s.status = ScanStatus.FAILED
+                s.error_message = "Scan interrupted by server restart. Please re-run scan."
+            if stale_scans:
+                db.commit()
+                logger.info(f"Cleaned up {len(stale_scans)} stale scans on startup")
+        except Exception as cleanup_err:
+            logger.warning(f"Stale scan cleanup notice: {cleanup_err}")
+        finally:
+            db.close()
     except Exception as e:
         logger.error("Database initialization notice", error=str(e))
     yield

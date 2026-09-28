@@ -31,11 +31,12 @@ export function ScanSelectorHeader({ currentScanId, onScanChange, title }: ScanS
     }
   }, [currentScanId]);
 
-  // Fetch scans when selected project changes
+  // Fetch scans when selected project changes and poll if any are running
   useEffect(() => {
+    let intervalId: any;
     if (selectedProjectId) {
-      const fetchScans = async () => {
-        setLoadingScans(true);
+      const fetchScans = async (isInitial = false) => {
+        if (isInitial) setLoadingScans(true);
         try {
           const projectScans = await api.getScans(selectedProjectId);
           setScans(projectScans);
@@ -50,14 +51,22 @@ export function ScanSelectorHeader({ currentScanId, onScanChange, title }: ScanS
         } catch (err) {
           console.error('Failed to fetch scans for project:', err);
         } finally {
-          setLoadingScans(false);
+          if (isInitial) setLoadingScans(false);
         }
       };
-      fetchScans();
+      fetchScans(true);
+
+      intervalId = setInterval(() => {
+        fetchScans(false);
+      }, 3000);
     } else {
       setScans([]);
     }
-  }, [selectedProjectId]);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [selectedProjectId, currentScanId]);
 
   return (
     <div

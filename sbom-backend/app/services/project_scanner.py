@@ -76,14 +76,26 @@ class ProjectScanner:
             dependencies_data = analysis_result.get('dependencies', [])
             
             for eco_info in manifests:
-                eco = Ecosystem(eco_info['ecosystem'])
-                proj_eco = ProjectEcosystem(
-                    project_id=project.id,
-                    ecosystem=eco,
-                    manifest_path=eco_info['manifest_path'],
-                    lockfile_path=eco_info['lockfile_path'],
-                )
-                self.db.add(proj_eco)
+                try:
+                    eco = Ecosystem(eco_info['ecosystem'])
+                    existing_eco = self.db.query(ProjectEcosystem).filter(
+                        ProjectEcosystem.project_id == project.id,
+                        ProjectEcosystem.ecosystem == eco
+                    ).first()
+                    if not existing_eco:
+                        proj_eco = ProjectEcosystem(
+                            project_id=project.id,
+                            ecosystem=eco,
+                            manifest_path=eco_info['manifest_path'],
+                            lockfile_path=eco_info.get('lockfile_path'),
+                        )
+                        self.db.add(proj_eco)
+                    else:
+                        existing_eco.manifest_path = eco_info['manifest_path']
+                        if eco_info.get('lockfile_path'):
+                            existing_eco.lockfile_path = eco_info['lockfile_path']
+                except Exception as eco_err:
+                    logger.warning("Error recording project ecosystem", error=str(eco_err))
             
             dependencies = self._save_dependencies(scan.id, dependencies_data, analyzer)
             scan.total_dependencies = len(dependencies)
@@ -186,10 +198,16 @@ class ProjectScanner:
         
         except Exception as e:
             logger.error("Scan failed", scan_id=scan.id, error=str(e))
-            scan.status = ScanStatus.FAILED
-            scan.error_message = str(e)
-            scan.completed_at = datetime.utcnow()
-            self.db.commit()
+            try:
+                self.db.rollback()
+                failed_scan = self.db.query(Scan).filter(Scan.id == scan.id).first()
+                if failed_scan:
+                    failed_scan.status = ScanStatus.FAILED
+                    failed_scan.error_message = str(e)
+                    failed_scan.completed_at = datetime.utcnow()
+                    self.db.commit()
+            except Exception as rollback_err:
+                logger.error("Failed to commit FAILED scan status", error=str(rollback_err))
             raise
         
         finally:

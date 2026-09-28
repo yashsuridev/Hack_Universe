@@ -150,7 +150,51 @@ export function ReportsPage() {
           </p>
         </motion.div>
 
-      /* ── Loading ─────────────────────────────────────────────── */
+      /* ── Running / In-progress ─────────────────────────────────── */
+      ) : currentScan?.status === 'running' || currentScan?.status === 'pending' ? (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="card h-96 flex flex-col items-center justify-center gap-4 text-center"
+        >
+          <RefreshCw
+            className="h-10 w-10 animate-spin"
+            style={{ color: '#00ffc8' }}
+          />
+          <div>
+            <h2 className="text-sm font-bold uppercase tracking-widest mb-1" style={{ color: '#eaf5ee' }}>
+              Scan in Progress...
+            </h2>
+            <p className={sectionLabel + ' normal-case'} style={{ fontSize: '0.78rem' }}>
+              Analyzing dependencies and scanning vulnerability databases. Results will appear automatically.
+            </p>
+          </div>
+        </motion.div>
+
+      /* ── Failed Scan ─────────────────────────────────────────── */
+      ) : currentScan?.status === 'failed' ? (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="card h-96 flex flex-col items-center justify-center gap-3 text-center"
+          style={{
+            background: 'rgba(255,77,77,0.04)',
+            borderColor: 'rgba(255,77,77,0.25)',
+          }}
+        >
+          <XCircle className="h-14 w-14" style={{ color: '#ff4d4d' }} />
+          <p
+            className="text-sm font-bold uppercase tracking-widest"
+            style={{ color: '#eaf5ee' }}
+          >
+            Scan Failed
+          </p>
+          <p className={sectionLabel + ' normal-case text-[#ff8c42]'} style={{ fontSize: '0.75rem', maxWidth: '600px' }}>
+            {currentScan.error_message || 'The scan encountered an unrecoverable error.'}
+          </p>
+        </motion.div>
+
+      /* ── Loading Report ──────────────────────────────────────── */
       ) : loadingReport ? (
         <motion.div
           initial={{ opacity: 0 }}

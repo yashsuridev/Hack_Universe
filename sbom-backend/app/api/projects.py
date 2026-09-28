@@ -175,15 +175,23 @@ async def run_scan_task(scan_id: int, zip_path: str):
             await scan_project(db, scan.project_id, zip_path, scan_id)
     except Exception as e:
         logger.error("Background scan failed", scan_id=scan_id, error=str(e))
-        scan = db.query(Scan).filter(Scan.id == scan_id).first()
-        if scan:
-            scan.status = ScanStatus.FAILED
-            scan.error_message = str(e)
-            db.commit()
+        try:
+            db.rollback()
+            scan = db.query(Scan).filter(Scan.id == scan_id).first()
+            if scan:
+                scan.status = ScanStatus.FAILED
+                scan.error_message = str(e)
+                scan.completed_at = datetime.utcnow()
+                db.commit()
+        except Exception as inner_e:
+            logger.error("Failed to mark scan as failed", error=str(inner_e))
     finally:
         db.close()
         if os.path.exists(zip_path):
-            os.unlink(zip_path)
+            try:
+                os.unlink(zip_path)
+            except Exception:
+                pass
 
 
 @router.post("/{project_id}/scan", response_model=ScanResponse)
