@@ -9,6 +9,7 @@ interface UseApiState<T> {
 
 interface UseApiOptions {
   immediate?: boolean;
+  pollInterval?: number;
 }
 
 export function useApi<T>(
@@ -16,7 +17,7 @@ export function useApi<T>(
   options: UseApiOptions = {}, 
   deps: any[] = []
 ) {
-  const { immediate = true } = options;
+  const { immediate = true, pollInterval } = options;
   const [state, setState] = useState<UseApiState<T>>({
     data: null,
     loading: immediate,
@@ -48,6 +49,19 @@ export function useApi<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, immediate]);
 
+  useEffect(() => {
+    if (!pollInterval || pollInterval <= 0) return;
+    const interval = setInterval(async () => {
+      try {
+        const data = await apiCallRef.current();
+        setState(prev => ({ ...prev, data, error: null }));
+      } catch (error) {
+        // Silent polling error
+      }
+    }, pollInterval);
+    return () => clearInterval(interval);
+  }, [pollInterval]);
+
   return { ...state, execute, refetch: execute };
 }
 
@@ -56,19 +70,19 @@ export function useProjects() {
 }
 
 export function useProject(id: number | null) {
-  return useApi(() => api.getProject(id!), { immediate: !!id }, [id]);
+  return useApi(() => api.getProject(id!), { immediate: !!id, pollInterval: 2500 }, [id]);
 }
 
 export function useScans(projectId: number | null) {
-  return useApi(() => api.getScans(projectId!), { immediate: !!projectId }, [projectId]);
+  return useApi(() => api.getScans(projectId!), { immediate: !!projectId, pollInterval: 2500 }, [projectId]);
 }
 
 export function useLatestScan(projectId: number | null) {
-  return useApi(() => api.getLatestScan(projectId!), { immediate: !!projectId }, [projectId]);
+  return useApi(() => api.getLatestScan(projectId!), { immediate: !!projectId, pollInterval: 2500 }, [projectId]);
 }
 
 export function useScan(scanId: number | null) {
-  return useApi(() => api.getScan(scanId!), { immediate: !!scanId }, [scanId]);
+  return useApi(() => api.getScan(scanId!), { immediate: !!scanId, pollInterval: 2500 }, [scanId]);
 }
 
 export function useScanDependencies(
