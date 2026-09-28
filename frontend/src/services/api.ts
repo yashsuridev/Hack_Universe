@@ -34,7 +34,17 @@ class ApiService {
     this.client.interceptors.response.use(
       (response) => response,
       (error: AxiosError<any>) => {
-        const message = error.response?.data?.detail || error.message || 'An error occurred';
+        let message = 'An error occurred';
+        const detail = error.response?.data?.detail;
+        if (typeof detail === 'string') {
+          message = detail;
+        } else if (Array.isArray(detail)) {
+          message = detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ');
+        } else if (detail && typeof detail === 'object') {
+          message = JSON.stringify(detail);
+        } else if (error.message) {
+          message = error.message;
+        }
         return Promise.reject(new Error(message));
       }
     );
@@ -67,9 +77,22 @@ class ApiService {
   async uploadAndScan(projectId: number, file: File): Promise<Scan> {
     const formData = new FormData();
     formData.append('file', file);
-    
-    const response = await this.client.post<Scan>(`/projects/${projectId}/upload`, formData);
-    return response.data;
+
+    const uploadUrl = `${API_BASE_URL}/projects/${projectId}/upload`;
+    const response = await fetch(uploadUrl, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      const msg = typeof errData.detail === 'string'
+        ? errData.detail
+        : (Array.isArray(errData.detail) ? errData.detail.map((d: any) => d.msg).join(', ') : 'Upload failed');
+      throw new Error(msg);
+    }
+
+    return await response.json();
   }
 
   async getScans(projectId: number): Promise<Scan[]> {
