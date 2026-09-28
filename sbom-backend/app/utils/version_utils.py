@@ -8,7 +8,8 @@ def parse_version(version_str: str) -> Optional[Version]:
     if not version_str:
         return None
     try:
-        return Version(version_str.strip())
+        norm = normalize_version(version_str)
+        return Version(norm)
     except InvalidVersion:
         return None
 
@@ -70,17 +71,25 @@ def get_fixed_version(affected_ranges: List[str], installed: str) -> Optional[st
 
 
 def normalize_version(version: str) -> str:
+    if not version:
+        return ""
     version = version.strip()
-    version = re.sub(r'^v', '', version)
-    version = re.sub(r'^=', '', version)
+    match = re.search(r'\d+\.\d+(?:\.\d+)?(?:[a-zA-Z0-9\.\-]+)?', version)
+    if match:
+        return match.group(0)
+    version = re.sub(r'^[v=^~><\s]+', '', version)
     return version
 
 
 def extract_version_from_range(range_str: str) -> Optional[str]:
-    spec = parse_specifier(range_str)
-    if spec is None:
+    if not range_str:
         return None
-    for specifier in spec:
-        if specifier.operator in ("==", "===", "~="):
-            return specifier.version
+    spec = parse_specifier(range_str)
+    if spec:
+        for specifier in spec:
+            if specifier.operator in ("==", "===", "~=", ">=", ">"):
+                return specifier.version
+    match = re.search(r'\d+\.\d+(?:\.\d+)?(?:[a-zA-Z0-9\.\-]+)?', range_str)
+    if match:
+        return match.group(0)
     return None

@@ -17,7 +17,7 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/sbom", tags=["sbom"])
 
 
-@router.get("/scan/{scan_id}", response_model=SBOMResponse)
+@router.get("/scan/{scan_id}")
 async def get_sbom(scan_id: int, db: Session = Depends(get_db)):
     scan = db.query(Scan).filter(Scan.id == scan_id).first()
     if not scan:
@@ -25,18 +25,18 @@ async def get_sbom(scan_id: int, db: Session = Depends(get_db)):
     
     sbom_record = db.query(SBOM).filter(SBOM.scan_id == scan_id).first()
     if sbom_record and sbom_record.components:
-        return SBOMResponse(
-            bomFormat=sbom_record.bom_format,
-            specVersion=sbom_record.spec_version,
-            serialNumber=sbom_record.serial_number,
-            version=sbom_record.version,
-            metadata=sbom_record.metadata,
-            components=sbom_record.components,
-            services=sbom_record.services,
-            dependencies=sbom_record.dependencies,
-            compositions=sbom_record.compositions,
-            vulnerabilities=sbom_record.vulnerabilities,
-        )
+        return {
+            "bomFormat": sbom_record.bom_format or "CycloneDX",
+            "specVersion": sbom_record.spec_version or "1.6",
+            "serialNumber": sbom_record.serial_number,
+            "version": sbom_record.version or 1,
+            "metadata": sbom_record.sbom_data or {},
+            "components": sbom_record.components or [],
+            "services": sbom_record.services or [],
+            "dependencies": sbom_record.dependencies or [],
+            "compositions": sbom_record.compositions or [],
+            "vulnerabilities": sbom_record.vulnerabilities or [],
+        }
     
     dependencies = db.query(Dependency).filter(Dependency.scan_id == scan_id).all()
     vulnerabilities = db.query(Vulnerability).filter(Vulnerability.scan_id == scan_id).all()
@@ -44,7 +44,7 @@ async def get_sbom(scan_id: int, db: Session = Depends(get_db)):
     generator = SBOMGenerator()
     sbom_json = generator.generate(scan_id, dependencies, vulnerabilities, scan.project.name if scan.project else "unknown")
     
-    return SBOMResponse(**sbom_json)
+    return sbom_json
 
 
 @router.get("/scan/{scan_id}/download")
