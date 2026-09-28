@@ -19,6 +19,12 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/scans", tags=["scans"])
 
 
+def _enum_val(v, default=""):
+    if v is None:
+        return default
+    return v.value if hasattr(v, "value") else str(v)
+
+
 @router.get("/{scan_id}", response_model=ScanDetailResponse)
 async def get_scan(scan_id: int, db: Session = Depends(get_db)):
     scan = db.query(Scan).filter(Scan.id == scan_id).first()
@@ -38,13 +44,13 @@ async def get_scan(scan_id: int, db: Session = Depends(get_db)):
             resolved_version=d.resolved_version,
             latest_version=d.latest_version,
             recommended_version=d.recommended_version,
-            dependency_type=d.dependency_type.value,
+            dependency_type=_enum_val(d.dependency_type, "direct"),
             purl=d.purl,
             license=d.license,
-            status=d.status.value,
-            risk_score=d.risk_score,
-            has_lifecycle_scripts=d.has_lifecycle_scripts,
-            typosquatting_flag=d.typosquatting_flag,
+            status=_enum_val(d.status, "unknown"),
+            risk_score=d.risk_score or 0.0,
+            has_lifecycle_scripts=d.has_lifecycle_scripts or False,
+            typosquatting_flag=d.typosquatting_flag or False,
         )
         for d in dependencies
     ]
@@ -57,7 +63,7 @@ async def get_scan(scan_id: int, db: Session = Depends(get_db)):
             osv_id=v.osv_id,
             cve_id=v.cve_id,
             ghsa_id=v.ghsa_id,
-            severity=v.severity.value,
+            severity=_enum_val(v.severity, "unknown"),
             cvss_score=v.cvss_score,
             affected_versions=v.affected_versions,
             fixed_version=v.fixed_version,
@@ -69,12 +75,12 @@ async def get_scan(scan_id: int, db: Session = Depends(get_db)):
     risk_summaries = [
         RiskFindingSummaryResponse(
             id=f.id,
-            finding_type=f.finding_type.value,
-            severity=f.severity.value,
+            finding_type=_enum_val(f.finding_type, "unknown"),
+            severity=_enum_val(f.severity, "low"),
             title=f.title,
             description=f.description,
             recommendation=f.recommendation,
-            score_contribution=f.score_contribution,
+            score_contribution=f.score_contribution or 0.0,
         )
         for f in risk_findings
     ]
@@ -82,18 +88,18 @@ async def get_scan(scan_id: int, db: Session = Depends(get_db)):
     return ScanDetailResponse(
         id=scan.id,
         project_id=scan.project_id,
-        status=scan.status,
-        scan_type=scan.scan_type,
-        total_dependencies=scan.total_dependencies,
-        direct_dependencies=scan.direct_dependencies,
-        transitive_dependencies=scan.transitive_dependencies,
-        dev_dependencies=scan.dev_dependencies,
-        critical_count=scan.critical_count,
-        high_count=scan.high_count,
-        medium_count=scan.medium_count,
-        low_count=scan.low_count,
-        risk_score=scan.risk_score,
-        risk_level=scan.risk_level,
+        status=_enum_val(scan.status, "pending"),
+        scan_type=scan.scan_type or "full",
+        total_dependencies=scan.total_dependencies or 0,
+        direct_dependencies=scan.direct_dependencies or 0,
+        transitive_dependencies=scan.transitive_dependencies or 0,
+        dev_dependencies=scan.dev_dependencies or 0,
+        critical_count=scan.critical_count or 0,
+        high_count=scan.high_count or 0,
+        medium_count=scan.medium_count or 0,
+        low_count=scan.low_count or 0,
+        risk_score=scan.risk_score or 0.0,
+        risk_level=scan.risk_level or "LOW",
         error_message=scan.error_message,
         started_at=scan.started_at,
         completed_at=scan.completed_at,
@@ -137,13 +143,13 @@ async def get_scan_dependencies(
             resolved_version=d.resolved_version,
             latest_version=d.latest_version,
             recommended_version=d.recommended_version,
-            dependency_type=d.dependency_type.value,
+            dependency_type=_enum_val(d.dependency_type, "direct"),
             purl=d.purl,
             license=d.license,
-            status=d.status.value,
-            risk_score=d.risk_score,
-            has_lifecycle_scripts=d.has_lifecycle_scripts,
-            typosquatting_flag=d.typosquatting_flag,
+            status=_enum_val(d.status, "unknown"),
+            risk_score=d.risk_score or 0.0,
+            has_lifecycle_scripts=d.has_lifecycle_scripts or False,
+            typosquatting_flag=d.typosquatting_flag or False,
         )
         for d in dependencies
     ]

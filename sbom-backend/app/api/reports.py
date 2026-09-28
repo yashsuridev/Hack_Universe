@@ -36,26 +36,26 @@ async def download_json_report(scan_id: int, db: Session = Depends(get_db)):
             "generator": "SBOM Auditor",
         },
         "project": {
-            "id": project.id,
-            "name": project.name,
-            "description": project.description,
+            "id": project.id if project else scan.project_id,
+            "name": project.name if project else "Project",
+            "description": project.description if project else None,
         },
         "scan": {
             "id": scan.id,
-            "status": scan.status.value,
-            "scan_type": scan.scan_type,
+            "status": _enum_val(scan.status, "completed"),
+            "scan_type": scan.scan_type or "full",
             "started_at": scan.started_at.isoformat() if scan.started_at else None,
             "completed_at": scan.completed_at.isoformat() if scan.completed_at else None,
-            "total_dependencies": scan.total_dependencies,
-            "direct_dependencies": scan.direct_dependencies,
-            "transitive_dependencies": scan.transitive_dependencies,
-            "dev_dependencies": scan.dev_dependencies,
-            "critical_count": scan.critical_count,
-            "high_count": scan.high_count,
-            "medium_count": scan.medium_count,
-            "low_count": scan.low_count,
-            "risk_score": scan.risk_score,
-            "risk_level": scan.risk_level,
+            "total_dependencies": scan.total_dependencies or 0,
+            "direct_dependencies": scan.direct_dependencies or 0,
+            "transitive_dependencies": scan.transitive_dependencies or 0,
+            "dev_dependencies": scan.dev_dependencies or 0,
+            "critical_count": scan.critical_count or 0,
+            "high_count": scan.high_count or 0,
+            "medium_count": scan.medium_count or 0,
+            "low_count": scan.low_count or 0,
+            "risk_score": scan.risk_score or 0.0,
+            "risk_level": scan.risk_level or "LOW",
         },
         "dependencies": [
             {
@@ -66,13 +66,13 @@ async def download_json_report(scan_id: int, db: Session = Depends(get_db)):
                 "resolved_version": d.resolved_version,
                 "latest_version": d.latest_version,
                 "recommended_version": d.recommended_version,
-                "dependency_type": d.dependency_type.value,
+                "dependency_type": _enum_val(d.dependency_type, "direct"),
                 "purl": d.purl,
                 "license": d.license,
-                "status": d.status.value,
-                "risk_score": d.risk_score,
-                "has_lifecycle_scripts": d.has_lifecycle_scripts,
-                "typosquatting_flag": d.typosquatting_flag,
+                "status": _enum_val(d.status, "unknown"),
+                "risk_score": d.risk_score or 0.0,
+                "has_lifecycle_scripts": d.has_lifecycle_scripts or False,
+                "typosquatting_flag": d.typosquatting_flag or False,
                 "dependency_path": d.dependency_path,
             }
             for d in dependencies
@@ -85,7 +85,7 @@ async def download_json_report(scan_id: int, db: Session = Depends(get_db)):
                 "osv_id": v.osv_id,
                 "cve_id": v.cve_id,
                 "ghsa_id": v.ghsa_id,
-                "severity": v.severity.value,
+                "severity": _enum_val(v.severity, "unknown"),
                 "cvss_score": v.cvss_score,
                 "cvss_vector": v.cvss_vector,
                 "summary": v.summary,
@@ -101,13 +101,13 @@ async def download_json_report(scan_id: int, db: Session = Depends(get_db)):
         "risk_findings": [
             {
                 "id": f.id,
-                "finding_type": f.finding_type.value,
-                "severity": f.severity.value,
+                "finding_type": _enum_val(f.finding_type, "unknown"),
+                "severity": _enum_val(f.severity, "low"),
                 "title": f.title,
                 "description": f.description,
                 "recommendation": f.recommendation,
                 "evidence": f.evidence,
-                "score_contribution": f.score_contribution,
+                "score_contribution": f.score_contribution or 0.0,
             }
             for f in risk_findings
         ],
@@ -120,6 +120,12 @@ async def download_json_report(scan_id: int, db: Session = Depends(get_db)):
         media_type="application/json",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+def _enum_val(v, default=""):
+    if v is None:
+        return default
+    return v.value if hasattr(v, "value") else str(v)
 
 
 @router.get("/scan/{scan_id}/summary")
@@ -136,42 +142,49 @@ async def get_report_summary(scan_id: int, db: Session = Depends(get_db)):
     
     by_ecosystem = {}
     for d in dependencies:
-        if d.ecosystem not in by_ecosystem:
-            by_ecosystem[d.ecosystem] = {"total": 0, "direct": 0, "transitive": 0, "dev": 0}
-        by_ecosystem[d.ecosystem]["total"] += 1
-        if d.dependency_type.value == "direct":
-            by_ecosystem[d.ecosystem]["direct"] += 1
-        elif d.dependency_type.value == "transitive":
-            by_ecosystem[d.ecosystem]["transitive"] += 1
-        elif d.dependency_type.value == "development":
-            by_ecosystem[d.ecosystem]["dev"] += 1
+        eco = d.ecosystem or "unknown"
+        if eco not in by_ecosystem:
+            by_ecosystem[eco] = {"total": 0, "direct": 0, "transitive": 0, "dev": 0}
+        by_ecosystem[eco]["total"] += 1
+        dtype = _enum_val(d.dependency_type, "direct").lower()
+        if dtype == "direct":
+            by_ecosystem[eco]["direct"] += 1
+        elif dtype == "transitive":
+            by_ecosystem[eco]["transitive"] += 1
+        elif dtype in ("development", "dev"):
+            by_ecosystem[eco]["dev"] += 1
     
     vuln_by_severity = {"critical": 0, "high": 0, "medium": 0, "low": 0, "unknown": 0}
     for v in vulnerabilities:
-        vuln_by_severity[v.severity.value] += 1
+        sev = _enum_val(v.severity, "unknown").lower()
+        if sev in vuln_by_severity:
+            vuln_by_severity[sev] += 1
+        else:
+            vuln_by_severity["unknown"] += 1
     
     risk_by_type = {}
     for f in risk_findings:
-        ftype = f.finding_type.value
+        ftype = _enum_val(f.finding_type, "unknown")
         if ftype not in risk_by_type:
             risk_by_type[ftype] = {"count": 0, "total_score": 0}
         risk_by_type[ftype]["count"] += 1
-        risk_by_type[ftype]["total_score"] += f.score_contribution
+        risk_by_type[ftype]["total_score"] += (f.score_contribution or 0.0)
     
     return {
-        "project": {"id": project.id, "name": project.name},
+        "project": {"id": project.id if project else scan.project_id, "name": project.name if project else "Project"},
         "scan": {
             "id": scan.id,
-            "risk_score": scan.risk_score,
-            "risk_level": scan.risk_level,
-            "total_dependencies": scan.total_dependencies,
+            "status": _enum_val(scan.status, "completed"),
+            "risk_score": scan.risk_score or 0.0,
+            "risk_level": scan.risk_level or "LOW",
+            "total_dependencies": scan.total_dependencies or 0,
         },
         "dependency_stats": {
             "by_ecosystem": by_ecosystem,
             "by_type": {
-                "direct": scan.direct_dependencies,
-                "transitive": scan.transitive_dependencies,
-                "development": scan.dev_dependencies,
+                "direct": scan.direct_dependencies or 0,
+                "transitive": scan.transitive_dependencies or 0,
+                "development": scan.dev_dependencies or 0,
             },
         },
         "vulnerability_stats": vuln_by_severity,

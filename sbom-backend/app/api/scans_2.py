@@ -17,6 +17,12 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/scans", tags=["scans"])
 
 
+def _enum_val(v, default=""):
+    if v is None:
+        return default
+    return v.value if hasattr(v, "value") else str(v)
+
+
 @router.get("/{scan_id}/dependency-tree", response_model=List[DependencyTreeNode])
 async def get_dependency_tree(scan_id: int, db: Session = Depends(get_db)):
     scan = db.query(Scan).filter(Scan.id == scan_id).first()
@@ -40,22 +46,23 @@ async def get_dependency_tree(scan_id: int, db: Session = Depends(get_db)):
         
         children = []
         for child_id in children_map.get(dep_id, []):
-            children.append(build_tree(child_id))
+            if child_id in dep_map:
+                children.append(build_tree(child_id))
         
         return DependencyTreeNode(
             id=dep.id,
             name=dep.name,
             version=dep.resolved_version or dep.declared_version or "unknown",
             ecosystem=dep.ecosystem,
-            dependency_type=dep.dependency_type.value,
-            status=dep.status.value,
-            risk_score=dep.risk_score,
+            dependency_type=_enum_val(dep.dependency_type, "direct"),
+            status=_enum_val(dep.status, "unknown"),
+            risk_score=dep.risk_score or 0.0,
             vulnerabilities_count=vuln_count,
             children=children,
             parent_id=None,
         )
     
-    root_deps = [d for d in dependencies if d.dependency_type.value in ('direct', 'development')]
+    root_deps = [d for d in dependencies if _enum_val(d.dependency_type, "direct") in ('direct', 'development')]
     tree = [build_tree(d.id) for d in root_deps]
     
     return tree
@@ -86,7 +93,7 @@ async def get_scan_vulnerabilities(
             osv_id=v.osv_id,
             cve_id=v.cve_id,
             ghsa_id=v.ghsa_id,
-            severity=v.severity.value,
+            severity=_enum_val(v.severity, "unknown"),
             cvss_score=v.cvss_score,
             affected_versions=v.affected_versions,
             fixed_version=v.fixed_version,
@@ -106,25 +113,25 @@ async def get_scan_risk(scan_id: int, db: Session = Depends(get_db)):
     
     breakdown = {}
     for finding in risk_findings:
-        ftype = finding.finding_type.value
+        ftype = _enum_val(finding.finding_type, "unknown")
         if ftype not in breakdown:
             breakdown[ftype] = 0
-        breakdown[ftype] += finding.score_contribution
+        breakdown[ftype] += (finding.score_contribution or 0.0)
     
     return {
-        "score": scan.risk_score,
-        "level": scan.risk_level,
+        "score": scan.risk_score or 0.0,
+        "level": scan.risk_level or "LOW",
         "max_score": 100.0,
         "breakdown": breakdown,
         "findings": [
             {
                 "id": f.id,
-                "type": f.finding_type.value,
-                "severity": f.severity.value,
+                "type": _enum_val(f.finding_type, "unknown"),
+                "severity": _enum_val(f.severity, "low"),
                 "title": f.title,
                 "description": f.description,
                 "recommendation": f.recommendation,
-                "score_contribution": f.score_contribution,
+                "score_contribution": f.score_contribution or 0.0,
             }
             for f in risk_findings
         ],
