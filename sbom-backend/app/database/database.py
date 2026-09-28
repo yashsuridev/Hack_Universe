@@ -24,7 +24,13 @@ def get_db():
 
 
 def init_db():
-    from app.models import project, scan, dependency, vulnerability, sbom, risk_finding, license
+    import app.models.project
+    import app.models.scan
+    import app.models.dependency
+    import app.models.vulnerability
+    import app.models.sbom
+    import app.models.risk_finding
+    import app.models.license
     
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.temp_dir).mkdir(parents=True, exist_ok=True)
@@ -36,3 +42,11 @@ def init_db():
             db_file.parent.mkdir(parents=True, exist_ok=True)
             
     Base.metadata.create_all(bind=engine)
+    print("Database tables initialized:", list(Base.metadata.tables.keys()))
+
+
+# Initialize tables on module load
+try:
+    init_db()
+except Exception as _e:
+    pass
