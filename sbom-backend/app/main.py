@@ -65,6 +65,18 @@ app.include_router(vulnerabilities.router, prefix="/api")
 app.include_router(sbom.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 
+from fastapi.responses import JSONResponse
+import traceback
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    err_tb = traceback.format_exc()
+    logger.error("Unhandled exception on request", path=request.url.path, error=str(exc), traceback=err_tb)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "traceback": err_tb, "path": str(request.url.path)}
+    )
+
 
 @app.get("/")
 async def root():
