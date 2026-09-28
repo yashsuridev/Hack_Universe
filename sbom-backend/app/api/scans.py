@@ -25,7 +25,7 @@ def _enum_val(v, default=""):
     return v.value if hasattr(v, "value") else str(v)
 
 
-@router.get("/{scan_id}", response_model=ScanDetailResponse)
+@router.get("/{scan_id}")
 async def get_scan(scan_id: int, db: Session = Depends(get_db)):
     scan = db.query(Scan).filter(Scan.id == scan_id).first()
     if not scan:
@@ -36,79 +36,79 @@ async def get_scan(scan_id: int, db: Session = Depends(get_db)):
     risk_findings = db.query(RiskFinding).filter(RiskFinding.scan_id == scan_id).all()
     
     dep_summaries = [
-        DependencySummaryResponse(
-            id=d.id,
-            name=d.name,
-            ecosystem=d.ecosystem,
-            declared_version=d.declared_version,
-            resolved_version=d.resolved_version,
-            latest_version=d.latest_version,
-            recommended_version=d.recommended_version,
-            dependency_type=_enum_val(d.dependency_type, "direct"),
-            purl=d.purl,
-            license=d.license,
-            status=_enum_val(d.status, "unknown"),
-            risk_score=d.risk_score or 0.0,
-            has_lifecycle_scripts=d.has_lifecycle_scripts or False,
-            typosquatting_flag=d.typosquatting_flag or False,
-        )
+        {
+            "id": d.id,
+            "name": d.name,
+            "ecosystem": d.ecosystem,
+            "declared_version": d.declared_version,
+            "resolved_version": d.resolved_version,
+            "latest_version": d.latest_version,
+            "recommended_version": d.recommended_version,
+            "dependency_type": _enum_val(d.dependency_type, "direct"),
+            "purl": d.purl,
+            "license": d.license,
+            "status": _enum_val(d.status, "unknown"),
+            "risk_score": d.risk_score or 0.0,
+            "has_lifecycle_scripts": d.has_lifecycle_scripts or False,
+            "typosquatting_flag": d.typosquatting_flag or False,
+        }
         for d in dependencies
     ]
     
     vuln_summaries = [
-        VulnerabilitySummaryResponse(
-            id=v.id,
-            dependency_id=v.dependency_id,
-            dependency_name=v.dependency.name if v.dependency else "unknown",
-            osv_id=v.osv_id,
-            cve_id=v.cve_id,
-            ghsa_id=v.ghsa_id,
-            severity=_enum_val(v.severity, "unknown"),
-            cvss_score=v.cvss_score,
-            affected_versions=v.affected_versions,
-            fixed_version=v.fixed_version,
-            published_at=v.published_at,
-        )
+        {
+            "id": v.id,
+            "dependency_id": v.dependency_id,
+            "dependency_name": v.dependency.name if v.dependency else "unknown",
+            "osv_id": v.osv_id,
+            "cve_id": v.cve_id,
+            "ghsa_id": v.ghsa_id,
+            "severity": _enum_val(v.severity, "unknown"),
+            "cvss_score": v.cvss_score,
+            "affected_versions": v.affected_versions,
+            "fixed_version": v.fixed_version,
+            "published_at": v.published_at.isoformat() if v.published_at else None,
+        }
         for v in vulnerabilities
     ]
     
     risk_summaries = [
-        RiskFindingSummaryResponse(
-            id=f.id,
-            finding_type=_enum_val(f.finding_type, "unknown"),
-            severity=_enum_val(f.severity, "low"),
-            title=f.title,
-            description=f.description,
-            recommendation=f.recommendation,
-            score_contribution=f.score_contribution or 0.0,
-        )
+        {
+            "id": f.id,
+            "finding_type": _enum_val(f.finding_type, "unknown"),
+            "severity": _enum_val(f.severity, "low"),
+            "title": f.title,
+            "description": f.description,
+            "recommendation": f.recommendation,
+            "score_contribution": f.score_contribution or 0.0,
+        }
         for f in risk_findings
     ]
     
-    return ScanDetailResponse(
-        id=scan.id,
-        project_id=scan.project_id,
-        status=_enum_val(scan.status, "pending"),
-        scan_type=scan.scan_type or "full",
-        total_dependencies=scan.total_dependencies or 0,
-        direct_dependencies=scan.direct_dependencies or 0,
-        transitive_dependencies=scan.transitive_dependencies or 0,
-        dev_dependencies=scan.dev_dependencies or 0,
-        critical_count=scan.critical_count or 0,
-        high_count=scan.high_count or 0,
-        medium_count=scan.medium_count or 0,
-        low_count=scan.low_count or 0,
-        risk_score=scan.risk_score or 0.0,
-        risk_level=scan.risk_level or "LOW",
-        error_message=scan.error_message,
-        started_at=scan.started_at,
-        completed_at=scan.completed_at,
-        created_at=scan.created_at,
-        scan_metadata=scan.scan_metadata,
-        dependencies=dep_summaries,
-        vulnerabilities=vuln_summaries,
-        risk_findings=risk_summaries,
-    )
+    return {
+        "id": scan.id,
+        "project_id": scan.project_id,
+        "status": _enum_val(scan.status, "pending"),
+        "scan_type": scan.scan_type or "full",
+        "total_dependencies": scan.total_dependencies or 0,
+        "direct_dependencies": scan.direct_dependencies or 0,
+        "transitive_dependencies": scan.transitive_dependencies or 0,
+        "dev_dependencies": scan.dev_dependencies or 0,
+        "critical_count": scan.critical_count or 0,
+        "high_count": scan.high_count or 0,
+        "medium_count": scan.medium_count or 0,
+        "low_count": scan.low_count or 0,
+        "risk_score": scan.risk_score or 0.0,
+        "risk_level": scan.risk_level or "LOW",
+        "error_message": scan.error_message,
+        "started_at": scan.started_at.isoformat() if scan.started_at else None,
+        "completed_at": scan.completed_at.isoformat() if scan.completed_at else None,
+        "created_at": scan.created_at.isoformat() if scan.created_at else None,
+        "scan_metadata": scan.scan_metadata,
+        "dependencies": dep_summaries,
+        "vulnerabilities": vuln_summaries,
+        "risk_findings": risk_summaries,
+    }
 
 
 @router.get("/{scan_id}/dependencies", response_model=List[DependencySummaryResponse])
