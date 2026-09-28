@@ -86,35 +86,51 @@ class ProjectScanner:
                 self.db.add(proj_eco)
             
             dependencies = self._save_dependencies(scan.id, dependencies_data, analyzer)
-            
+            scan.total_dependencies = len(dependencies)
+            scan.direct_dependencies = sum(1 for d in dependencies if d.dependency_type == DependencyType.DIRECT)
+            scan.transitive_dependencies = sum(1 for d in dependencies if d.dependency_type == DependencyType.TRANSITIVE)
+            scan.dev_dependencies = sum(1 for d in dependencies if d.dependency_type == DependencyType.DEVELOPMENT)
             self.db.commit()
             
-            vulnerability_scanner = VulnerabilityScanner(self.db)
-            vulnerabilities = await vulnerability_scanner.scan_dependencies(dependencies)
+            vulnerabilities = []
+            try:
+                vulnerability_scanner = VulnerabilityScanner(self.db)
+                vulnerabilities = await vulnerability_scanner.scan_dependencies(dependencies)
+                for vuln in vulnerabilities:
+                    self.db.add(vuln)
+                self.db.commit()
+            except Exception as e:
+                logger.error("Vulnerability scan step error", scan_id=scan.id, error=str(e))
             
-            for vuln in vulnerabilities:
-                self.db.add(vuln)
+            try:
+                version_checker = VersionChecker()
+                await self._update_latest_versions(dependencies, version_checker)
+                await version_checker.close()
+            except Exception as e:
+                logger.warning("Version checker step error", scan_id=scan.id, error=str(e))
             
-            self.db.commit()
+            try:
+                license_analyzer = LicenseAnalyzer(self.db)
+                for dep in dependencies:
+                    if dep.license:
+                        license_analyzer.save_license_info(dep.id, dep.license)
+            except Exception as e:
+                logger.warning("License analyzer step error", scan_id=scan.id, error=str(e))
             
-            version_checker = VersionChecker()
-            await self._update_latest_versions(dependencies, version_checker)
-            await version_checker.close()
+            try:
+                self._build_dependency_relationships(scan.id, dependencies, analyzer)
+            except Exception as e:
+                logger.warning("Dependency relationship step error", scan_id=scan.id, error=str(e))
             
-            license_analyzer = LicenseAnalyzer(self.db)
-            for dep in dependencies:
-                if dep.license:
-                    license_analyzer.save_license_info(dep.id, dep.license)
-            
-            self._build_dependency_relationships(scan.id, dependencies, analyzer)
-            
-            supply_chain_analyzer = SupplyChainAnalyzer(self.db)
-            risk_findings = supply_chain_analyzer.analyze(dependencies, vulnerabilities)
-            
-            for finding in risk_findings:
-                self.db.add(finding)
-            
-            self.db.commit()
+            risk_findings = []
+            try:
+                supply_chain_analyzer = SupplyChainAnalyzer(self.db)
+                risk_findings = supply_chain_analyzer.analyze(dependencies, vulnerabilities)
+                for finding in risk_findings:
+                    self.db.add(finding)
+                self.db.commit()
+            except Exception as e:
+                logger.warning("Supply chain analysis step error", scan_id=scan.id, error=str(e))
             
             # Generate SBOM - handle gracefully
             sbom_json = None
@@ -127,35 +143,35 @@ class ProjectScanner:
             
             # Create SBOM record
             if sbom_json:
-                sbom_record = SBOM(
-                    scan_id=scan.id,
-                    metadata=sbom_json.get('metadata'),
-                    components=sbom_json.get('components'),
-                    services=sbom_json.get('services'),
-                    dependencies=sbom_json.get('dependencies'),
-                    compositions=sbom_json.get('compositions'),
-                    vulnerabilities=sbom_json.get('vulnerabilities'),
-                )
-                self.db.add(sbom_record)
+                try:
+                    sbom_record = SBOM(
+                        scan_id=scan.id,
+                        sbom_data=sbom_json.get('metadata'),
+                        components=sbom_json.get('components'),
+                        services=sbom_json.get('services'),
+                        dependencies=sbom_json.get('dependencies'),
+                        compositions=sbom_json.get('compositions'),
+                        vulnerabilities=sbom_json.get('vulnerabilities'),
+                    )
+                    self.db.add(sbom_record)
+                except Exception as e:
+                    logger.warning("SBOM record creation error", scan_id=scan.id, error=str(e))
             
-            risk_engine = RiskEngine(self.db)
-            risk_result = risk_engine.calculate_risk_score(scan, risk_findings, dependencies, vulnerabilities)
-            risk_engine.update_scan_risk(scan, risk_result)
+            try:
+                risk_engine = RiskEngine(self.db)
+                risk_result = risk_engine.calculate_risk_score(scan, risk_findings, dependencies, vulnerabilities)
+                risk_engine.update_scan_risk(scan, risk_result)
+            except Exception as e:
+                logger.warning("Risk calculation error", scan_id=scan.id, error=str(e))
             
-            scan.total_dependencies = len(dependencies)
-            scan.direct_dependencies = sum(1 for d in dependencies if d.dependency_type == DependencyType.DIRECT)
-            scan.transitive_dependencies = sum(1 for d in dependencies if d.dependency_type == DependencyType.TRANSITIVE)
-            scan.dev_dependencies = sum(1 for d in dependencies if d.dependency_type == DependencyType.DEVELOPMENT)
-            
-            scan.critical_count = sum(1 for v in vulnerabilities if v.severity.value == 'critical')
-            scan.high_count = sum(1 for v in vulnerabilities if v.severity.value == 'high')
-            scan.medium_count = sum(1 for v in vulnerabilities if v.severity.value == 'medium')
-            scan.low_count = sum(1 for v in vulnerabilities if v.severity.value == 'low')
+            scan.critical_count = sum(1 for v in vulnerabilities if getattr(v.severity, 'value', str(v.severity)) == 'critical')
+            scan.high_count = sum(1 for v in vulnerabilities if getattr(v.severity, 'value', str(v.severity)) == 'high')
+            scan.medium_count = sum(1 for v in vulnerabilities if getattr(v.severity, 'value', str(v.severity)) == 'medium')
+            scan.low_count = sum(1 for v in vulnerabilities if getattr(v.severity, 'value', str(v.severity)) == 'low')
             
             scan.status = ScanStatus.COMPLETED
             scan.completed_at = datetime.utcnow()
             
-            # Assign SBOM JSON to scan - handle both dict and string formats
             if sbom_json and isinstance(sbom_json, dict):
                 scan.sbom_json = sbom_json
             elif sbom_json:
@@ -250,18 +266,29 @@ class ProjectScanner:
                 dep_groups[key] = []
             dep_groups[key].append(dep)
         
-        for key, deps in dep_groups.items():
-            ecosystem, name = key.split(':', 1)
-            latest = await version_checker.get_latest_version(ecosystem, name)
-            if latest:
-                for dep in deps:
-                    dep.latest_version = latest
-                    
-                    if dep.resolved_version and dep.resolved_version != latest:
-                        from app.utils.version_utils import compare_versions, get_fixed_version
-                        if compare_versions(dep.resolved_version, latest) < 0:
-                            if not dep.recommended_version:
-                                dep.recommended_version = latest
+        sem = asyncio.Semaphore(10)
+        
+        async def fetch_one(ecosystem: str, name: str, deps: List[Dependency]):
+            async with sem:
+                try:
+                    latest = await asyncio.wait_for(version_checker.get_latest_version(ecosystem, name), timeout=3.0)
+                    if latest:
+                        for dep in deps:
+                            dep.latest_version = latest
+                            if dep.resolved_version and dep.resolved_version != latest:
+                                from app.utils.version_utils import compare_versions
+                                if compare_versions(dep.resolved_version, latest) < 0:
+                                    if not dep.recommended_version:
+                                        dep.recommended_version = latest
+                except Exception:
+                    pass
+        
+        tasks = [
+            fetch_one(key.split(':', 1)[0], key.split(':', 1)[1], deps)
+            for key, deps in dep_groups.items()
+        ]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
     
     def _build_dependency_relationships(self, scan_id: int, dependencies: List[Dependency], analyzer: DependencyAnalyzer):
         if not dependencies:
