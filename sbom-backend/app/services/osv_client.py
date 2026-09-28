@@ -53,6 +53,27 @@ class OSVCache:
         self.cache[key] = (data, time.time())
 
 
+def normalize_osv_ecosystem(ecosystem: str) -> str:
+    eco = (ecosystem or "").lower().strip()
+    if eco in ("pypi", "python"):
+        return "PyPI"
+    elif eco in ("npm", "node", "javascript"):
+        return "npm"
+    elif eco in ("maven", "java"):
+        return "Maven"
+    elif eco in ("golang", "go"):
+        return "Go"
+    elif eco in ("crates.io", "cargo", "rust"):
+        return "crates.io"
+    elif eco in ("packagist", "php", "composer"):
+        return "Packagist"
+    elif eco in ("rubygems", "ruby", "gem"):
+        return "RubyGems"
+    elif eco in ("nuget", "c#", ".net"):
+        return "NuGet"
+    return ecosystem
+
+
 class OSVClient:
     def __init__(self, cache: Optional[OSVCache] = None):
         self.base_url = settings.osv_api_base_url
@@ -99,8 +120,8 @@ class OSVClient:
             "queries": [
                 {
                     "package": {
-                        "ecosystem": q.package['ecosystem'],
-                        "name": q.package['name'],
+                        "ecosystem": normalize_osv_ecosystem(q.package.get('ecosystem', '')),
+                        "name": q.package.get('name', ''),
                     },
                     "version": q.version,
                 }

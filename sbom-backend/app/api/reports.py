@@ -186,24 +186,28 @@ def _generate_recommendations(vulnerabilities: List[Vulnerability], risk_finding
     critical_vulns = [v for v in vulnerabilities if v.severity.value == 'critical']
     if critical_vulns:
         for v in critical_vulns[:3]:
+            dep_name = v.dependency.name if v.dependency else "package"
+            dep_version = v.dependency.resolved_version if v.dependency else "unknown"
             recommendations.append({
                 "priority": "critical",
-                "action": f"Upgrade {v.dependency.name} to {v.fixed_version or 'latest fixed version'}",
+                "action": f"Upgrade {dep_name} to {v.fixed_version or 'latest fixed version'}",
                 "reason": f"Critical vulnerability {v.osv_id} ({v.cve_id or 'N/A'})",
-                "package": v.dependency.name,
-                "current_version": v.dependency.resolved_version,
+                "package": dep_name,
+                "current_version": dep_version,
                 "fixed_version": v.fixed_version,
             })
     
     high_vulns = [v for v in vulnerabilities if v.severity.value == 'high']
     if high_vulns:
         for v in high_vulns[:5]:
+            dep_name = v.dependency.name if v.dependency else "package"
+            dep_version = v.dependency.resolved_version if v.dependency else "unknown"
             recommendations.append({
                 "priority": "high",
-                "action": f"Upgrade {v.dependency.name} to {v.fixed_version or 'latest fixed version'}",
+                "action": f"Upgrade {dep_name} to {v.fixed_version or 'latest fixed version'}",
                 "reason": f"High vulnerability {v.osv_id} ({v.cve_id or 'N/A'})",
-                "package": v.dependency.name,
-                "current_version": v.dependency.resolved_version,
+                "package": dep_name,
+                "current_version": dep_version,
                 "fixed_version": v.fixed_version,
             })
     
