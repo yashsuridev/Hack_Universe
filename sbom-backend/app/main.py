@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from app.config import settings
 from app.database.database import init_db
-from app.api import health, projects, scans, scans_2, dependencies, vulnerabilities, sbom, reports
+from app.api import health, projects, scans, dependencies, vulnerabilities, sbom, reports
 from app.utils.logging import configure_logging, get_logger
 
 logger = get_logger(__name__)
@@ -59,7 +59,6 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
 app.include_router(scans.router, prefix="/api")
-app.include_router(scans_2.router, prefix="/api")
 app.include_router(dependencies.router, prefix="/api")
 app.include_router(vulnerabilities.router, prefix="/api")
 app.include_router(sbom.router, prefix="/api")
