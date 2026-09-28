@@ -79,8 +79,9 @@ export function ProjectDetail() {
       navigate(`/scans/${newScan.id}`);
       setShowNewScanModal(false);
       refetchProject();
-    } catch (error) {
-      alert('Failed to upload and scan project');
+    } catch (error: any) {
+      const msg = error?.message || error?.response?.data?.detail || 'Failed to upload and scan project';
+      alert(`Upload failed: ${msg}`);
     } finally {
       setUploading(false);
       event.target.value = '';

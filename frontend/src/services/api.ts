@@ -68,9 +68,7 @@ class ApiService {
     const formData = new FormData();
     formData.append('file', file);
     
-    const response = await this.client.post<Scan>(`/projects/${projectId}/upload`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    const response = await this.client.post<Scan>(`/projects/${projectId}/upload`, formData);
     return response.data;
   }
 
